@@ -2,5 +2,20 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+solc = "0.8.24"
+solc-optimizer = true
+solc-optimizer-runs = 200
+viaIR = true
 
-# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+remappings = [
+    "@openzeppelin/=lib/openzeppelin-contracts/",
+    "ds-test/=lib/forge-std/lib/ds-test/src/",
+    "forge-std/=lib/forge-std/src/"
+    ]
+
+[etherscan]
+scroll-sepolia = { key = "YD4SSI87D8CE61VG5STXQAAWVR2WF8DYPY", url = "https://api-sepolia.scrollscan.com/api" }
+nero = { key = "", url = "https://testnet.nerochain.io/api" }
+linea = { key = "Q2RM1Z7Y7FS1BA1QPSRGMXRZ84EYU4FB4N", url = "https://api-sepolia.lineascan.build/api" }
+
+
