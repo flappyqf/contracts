@@ -8,24 +8,25 @@ import "./RrpRequesterV0.sol";
 import "./FlappyQF.sol";
 import "./interfaces/IProxy.sol";
 
-contract FlappyQFFactory is Ownable {
+contract FlappyQFFactory is RrpRequesterV0, Ownable {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable usdcToken;
     mapping(uint256 => address) public ethUsdProxies;
     mapping(uint256 => address) public usdcUsdProxies;
-    mapping(uint256 => address) public rounds;
-    uint256 public roundCount;
+    mapping(uint256 => address) public projects;
+    uint256 public projectCount;
 
     // QRNG variables
     address public airnode;
     bytes32 public endpointIdUint256;
     address public sponsorWallet;
-    mapping(bytes32 => address) public requestIdToRound;
+    mapping(bytes32 => address) public requestIdToProject;
+    mapping(bytes32 => bool) public expectingRequestWithIdToBeFulfilled;
 
-    event RoundCreated(
-        uint256 indexed roundId,
-        address roundAddress,
+    event ProjectCreated(
+        uint256 indexed projectId,
+        address projectAddress,
         uint256 matchingPoolAmount
     );
     event MatchingPoolFunded(uint256 amount);
@@ -35,18 +36,32 @@ contract FlappyQFFactory is Ownable {
         address ethUsdProxy,
         address usdcUsdProxy
     );
-    event RandomNumberRequested(
-        bytes32 indexed requestId,
-        address roundAddress
+
+    event RequestedUint256(bytes32 indexed requestId);
+    event ReceivedUint256(bytes32 indexed requestId, uint256 response);
+    event WithdrawalRequested(
+        address indexed airnode,
+        address indexed sponsorWallet
     );
-    event RandomNumberReceived(bytes32 indexed requestId, uint256 randomNumber);
 
     error InsufficientMatchingPoolFunds();
     error InvalidEthAmount();
     error InvalidProxyAddress();
     error InvalidPriceData();
+    error RequestIdNotKnown();
+    error OnlyProjectContractCanRequest();
+    error ProjectNotFound();
 
-    constructor(address _usdcToken) {
+    modifier onlyProject(uint256 projectId) {
+        if (msg.sender != projects[projectId])
+            revert OnlyProjectContractCanRequest();
+        _;
+    }
+
+    constructor(
+        address _usdcToken,
+        address _airnodeRrp
+    ) RrpRequesterV0(_airnodeRrp) Ownable(_msgSender()) {
         usdcToken = IERC20(_usdcToken);
 
         // Set proxy addresses for Scroll Testnet (chainId 534351)
@@ -68,32 +83,40 @@ contract FlappyQFFactory is Ownable {
         sponsorWallet = _sponsorWallet;
     }
 
-    function requestRandomNumber(address roundAddress) external {
-        require(
-            msg.sender == rounds[roundCount - 1],
-            "Only current round can request"
-        );
+    receive() external payable {
+        payable(owner()).transfer(msg.value);
+        emit WithdrawalRequested(airnode, sponsorWallet);
+    }
+
+    function makeRequestUint256(
+        uint256 projectId
+    ) external onlyProject(projectId) {
         bytes32 requestId = airnodeRrp.makeFullRequest(
             airnode,
             endpointIdUint256,
             address(this),
             sponsorWallet,
             address(this),
-            this.fulfillRandomNumber.selector,
+            this.fulfillUint256.selector,
             ""
         );
-        requestIdToRound[requestId] = roundAddress;
-        emit RandomNumberRequested(requestId, roundAddress);
+        expectingRequestWithIdToBeFulfilled[requestId] = true;
+        requestIdToProject[requestId] = projects[projectId];
+        emit RequestedUint256(requestId);
     }
 
-    function fulfillRandomNumber(
+    function fulfillUint256(
         bytes32 requestId,
         bytes calldata data
     ) external onlyAirnodeRrp {
-        uint256 randomNumber = abi.decode(data, (uint256));
-        address roundAddress = requestIdToRound[requestId];
-        FlappyQF(roundAddress).receiveRandomNumber(randomNumber);
-        emit RandomNumberReceived(requestId, randomNumber);
+        if (!expectingRequestWithIdToBeFulfilled[requestId])
+            revert RequestIdNotKnown();
+        expectingRequestWithIdToBeFulfilled[requestId] = false;
+
+        uint256 qrngUint256 = abi.decode(data, (uint256));
+        address projectAddress = requestIdToProject[requestId];
+        FlappyQF(projectAddress).receiveRandomNumber(qrngUint256);
+        emit ReceivedUint256(requestId, qrngUint256);
     }
 
     function setProxyAddresses(
@@ -108,7 +131,7 @@ contract FlappyQFFactory is Ownable {
         emit ProxyAddressSet(chainId, ethUsdProxy, usdcUsdProxy);
     }
 
-    function createRound(
+    function createProject(
         uint256 maxProjects,
         uint256 ethAmount
     ) external onlyOwner returns (address) {
@@ -137,15 +160,19 @@ contract FlappyQFFactory is Ownable {
         }
 
         uint256 createdTime = block.timestamp;
-        FlappyQF newRound = new FlappyQF(maxProjects, createdTime);
-        uint256 roundId = roundCount++;
-        rounds[roundId] = address(newRound);
+        FlappyQF newProject = new FlappyQF(
+            maxProjects,
+            createdTime,
+            address(this)
+        );
+        uint256 projectId = projectCount++;
+        projects[projectId] = address(newProject);
 
-        // Transfer matching pool funds to the new round
-        usdcToken.safeTransfer(address(newRound), usdcAmount);
+        // Transfer matching pool funds to the new project
+        usdcToken.safeTransfer(address(newProject), usdcAmount);
 
-        emit RoundCreated(roundId, address(newRound), usdcAmount);
-        return address(newRound);
+        emit ProjectCreated(projectId, address(newProject), usdcAmount);
+        return address(newProject);
     }
 
     function fundMatchingPool(uint256 amount) external onlyOwner {
@@ -160,5 +187,16 @@ contract FlappyQFFactory is Ownable {
         );
         usdcToken.safeTransfer(msg.sender, amount);
         emit MatchingPoolWithdrawn(amount);
+    }
+
+    function getProjectId(
+        address projectAddress
+    ) external view returns (uint256) {
+        for (uint256 i = 0; i < projectCount; i++) {
+            if (projects[i] == projectAddress) {
+                return i;
+            }
+        }
+        revert ProjectNotFound();
     }
 }
