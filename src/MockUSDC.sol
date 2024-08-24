@@ -6,15 +6,14 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract MockUSDC is ERC20, Ownable {
     uint8 private constant DECIMALS = 6;
-    uint256 private constant DECIMAL_FACTOR = 10 ** DECIMALS;
 
     constructor(
         string memory name,
         string memory symbol
     ) ERC20(name, symbol) Ownable(msg.sender) {}
 
-    function mint(address to, uint256 amount) public onlyOwner {
-        _mint(to, amount * DECIMAL_FACTOR);
+    function mint(address to, uint256 amount) public {
+        _mint(to, amount);
     }
 
     function decimals() public pure override returns (uint8) {
@@ -25,10 +24,6 @@ contract MockUSDC is ERC20, Ownable {
         address to,
         uint256 amount
     ) public override returns (bool) {
-        require(
-            amount % DECIMAL_FACTOR == 0,
-            "Amount must be a multiple of 10^6"
-        );
         return super.transfer(to, amount);
     }
 
@@ -37,10 +32,6 @@ contract MockUSDC is ERC20, Ownable {
         address to,
         uint256 amount
     ) public override returns (bool) {
-        require(
-            amount % DECIMAL_FACTOR == 0,
-            "Amount must be a multiple of 10^6"
-        );
         return super.transferFrom(from, to, amount);
     }
 
