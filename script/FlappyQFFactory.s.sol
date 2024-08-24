@@ -3,6 +3,7 @@ pragma solidity 0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {FlappyQFFactory} from "../src/FlappyQFFactory.sol";
+import {FlappyQF} from "../src/FlappyQF.sol";
 
 contract DeployFlappyQFFactory is Script {
     function run() external {
@@ -21,6 +22,8 @@ contract DeployFlappyQFFactory is Script {
         FlappyQFFactory factory = new FlappyQFFactory(usdcToken, airnodeRrp);
         console2.log("FlappyQFFactory deployed at: ", address(factory));
 
+        FlappyQF flappyQF = new FlappyQF(8, address(factory));
+        console2.log("FlappyQF deployed at: ", address(flappyQF));
         vm.stopBroadcast();
 
         // Log final state
