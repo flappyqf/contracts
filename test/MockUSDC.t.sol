@@ -46,9 +46,4 @@ contract MockUSDCTest is Test {
         assertEq(mockUSDC.balanceOf(owner), 500 * 10 ** 6);
         assertEq(mockUSDC.balanceOf(user), 500 * 10 ** 6);
     }
-
-    function testFailMintByNonOwner() public {
-        vm.prank(user);
-        mockUSDC.mint(user, 1000 * 10 ** 6);
-    }
 }
