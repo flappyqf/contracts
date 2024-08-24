@@ -4,7 +4,10 @@ pragma solidity 0.8.24;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 interface IFlappyQFFactory {
-    function requestRandomNumber(address roundAddress) external;
+    function makeRequestUint256(uint256 projectId) external;
+    function getProjectId(
+        address projectAddress
+    ) external view returns (uint256);
 }
 
 contract FlappyQF is Ownable {
@@ -18,23 +21,58 @@ contract FlappyQF is Ownable {
     uint256 public constant ROUND_DURATION = 30 days;
 
     Project[] public projects;
-    mapping(uint256 => mapping(uint256 => bool)) public matchWinners;
 
     address public immutable factory;
     uint256 public randomNumber;
     bool public randomNumberReceived;
 
+    uint256 public currentRound;
+    uint256 public matchesPerRound;
+    mapping(uint256 => mapping(uint256 => uint256[2])) public matchParticipants;
+    mapping(uint256 => mapping(uint256 => uint256)) public matchWinners;
+
     enum RoundStage {
         Submission,
         Review,
         Matching,
-        Voting
+        Competing
     }
 
+    RoundStage public currentStage;
+
+    event StageAdvanced(RoundStage newStage);
+
     event ProjectSubmitted(uint256 indexed projectId, string ipfsHash);
-    event ProjectReviewed(uint256 indexed projectId, bool accepted);
+    event ProjectAccepted(uint256 indexed projectId);
     event MatchingCompleted(uint256[] matchedProjects);
     event RandomNumberReceived(uint256 randomNumber);
+    event MatchCreated(uint256 project1, uint256 project2);
+    event MatchWinnerDeclared(
+        uint256 round,
+        uint256 roundMatch,
+        uint256 winner
+    );
+    event RoundCompleted(uint256 round);
+    event TournamentCompleted(uint256 winner);
+
+    error MaxProjectsReached();
+    error InvalidProjectId();
+    error NotInMatchingPeriod();
+    error RandomNumberAlreadyReceived();
+    error OnlyFactoryCanSetRandomNumber();
+    error RandomNumberNotReceived();
+    error CannotAdvancePastVoting();
+    error NotInCompetingPeriod();
+    error NotInReviewPeriod();
+    error NotInSubmissionPeriod();
+    error InvalidMatch();
+    error InvalidWinner();
+    error InvalidMatchNumber();
+
+    modifier onlyFactory() {
+        if (msg.sender != factory) revert OnlyFactoryCanSetRandomNumber();
+        _;
+    }
 
     constructor(
         uint256 _maxProjects,
@@ -47,80 +85,136 @@ contract FlappyQF is Ownable {
     }
 
     function submitProject(string memory _ipfsHash) external {
-        require(
-            block.timestamp < roundCreatedTime + 7 days,
-            "Submission period ended"
-        );
-        require(projects.length < maxProjects, "Max projects reached");
+        if (projects.length >= maxProjects) revert MaxProjectsReached();
+        if (getCurrentStage() != RoundStage.Submission)
+            revert NotInSubmissionPeriod();
+
         projects.push(Project(_ipfsHash, false));
         emit ProjectSubmitted(projects.length - 1, _ipfsHash);
     }
 
-    function reviewProject(
-        uint256 _projectId,
-        bool _accepted
-    ) external onlyOwner {
-        require(
-            block.timestamp >= roundCreatedTime + 7 days &&
-                block.timestamp < roundCreatedTime + 14 days,
-            "Not in review period"
-        );
-        require(_projectId < projects.length, "Invalid project ID");
-        projects[_projectId].accepted = _accepted;
-        emit ProjectReviewed(_projectId, _accepted);
+    function acceptProject(uint256 _projectId) external onlyOwner {
+        if (_projectId >= projects.length) revert InvalidProjectId();
+        if (getCurrentStage() != RoundStage.Review) revert NotInReviewPeriod();
+
+        projects[_projectId].accepted = true;
+        emit ProjectAccepted(_projectId);
     }
 
     function initiateMatching() external onlyOwner {
-        require(
-            block.timestamp >= roundCreatedTime + 14 days &&
-                block.timestamp < roundCreatedTime + 21 days,
-            "Not in matching period"
+        if (getCurrentStage() != RoundStage.Matching)
+            revert NotInMatchingPeriod();
+        if (randomNumberReceived) revert RandomNumberAlreadyReceived();
+
+        uint256 projectId = IFlappyQFFactory(factory).getProjectId(
+            address(this)
         );
-        require(!randomNumberReceived, "Random number already received");
-        IFlappyQFFactory(factory).requestRandomNumber(address(this));
+        IFlappyQFFactory(factory).makeRequestUint256(projectId);
     }
 
-    function receiveRandomNumber(uint256 _randomNumber) external {
-        require(msg.sender == factory, "Only factory can set random number");
-        require(!randomNumberReceived, "Random number already received");
+    function receiveRandomNumber(uint256 _randomNumber) external onlyFactory {
+        if (randomNumberReceived) revert RandomNumberAlreadyReceived();
         randomNumber = _randomNumber;
         randomNumberReceived = true;
         emit RandomNumberReceived(_randomNumber);
     }
 
     function completeMatching() external onlyOwner {
-        require(
-            block.timestamp >= roundCreatedTime + 14 days &&
-                block.timestamp < roundCreatedTime + 21 days,
-            "Not in matching period"
-        );
-        require(randomNumberReceived, "Random number not received yet");
+        if (getCurrentStage() != RoundStage.Matching)
+            revert NotInMatchingPeriod();
+        if (!randomNumberReceived) revert RandomNumberNotReceived();
 
         uint256[] memory acceptedProjects = getAcceptedProjects();
-        uint256[] memory matchedProjects = new uint256[](
-            acceptedProjects.length
-        );
+        uint256 projectCount = acceptedProjects.length;
 
-        for (uint256 i = 0; i < acceptedProjects.length; i++) {
-            uint256 j = i + (randomNumber % (acceptedProjects.length - i));
-            matchedProjects[i] = acceptedProjects[j];
-            acceptedProjects[j] = acceptedProjects[i];
+        // Ensure we have a power of 2 number of projects
+        uint256 bracketSize = 1;
+        while (bracketSize < projectCount) {
+            bracketSize *= 2;
         }
 
-        emit MatchingCompleted(matchedProjects);
+        uint256[] memory bracket = new uint256[](bracketSize);
+
+        // Fill the bracket with accepted projects and byes
+        for (uint256 i = 0; i < bracketSize; i++) {
+            if (i < projectCount) {
+                bracket[i] = acceptedProjects[i];
+            } else {
+                bracket[i] = type(uint256).max; // Use max uint256 to represent a bye
+            }
+        }
+
+        // Shuffle the bracket using Fisher-Yates algorithm
+        for (uint256 i = bracketSize - 1; i > 0; i--) {
+            uint256 j = uint256(keccak256(abi.encodePacked(randomNumber, i))) %
+                (i + 1);
+            (bracket[i], bracket[j]) = (bracket[j], bracket[i]);
+        }
+
+        // Set up initial matches
+        currentRound = 1;
+        matchesPerRound = bracketSize / 2;
+        for (uint256 i = 0; i < bracketSize; i += 2) {
+            matchParticipants[currentRound][i / 2] = [
+                bracket[i],
+                bracket[i + 1]
+            ];
+            emit MatchCreated(bracket[i], bracket[i + 1]);
+        }
+
+        emit MatchingCompleted(bracket);
     }
 
+    //WIP: to be replaced by a MUD framework contract that will handle game logic and pass the winner for the match
     function setMatchWinner(
-        uint256 _round,
         uint256 _match,
-        bool _winner
+        uint256 _winner
     ) external onlyOwner {
-        require(
-            block.timestamp >= roundCreatedTime + 21 days &&
-                block.timestamp < roundCreatedTime + ROUND_DURATION,
-            "Not in voting period"
-        );
-        matchWinners[_round][_match] = _winner;
+        if (getCurrentStage() != RoundStage.Competing)
+            revert NotInCompetingPeriod();
+        if (_match >= matchesPerRound) revert InvalidMatchNumber();
+
+        uint256[2] memory participants = matchParticipants[currentRound][
+            _match
+        ];
+        if (_winner != participants[0] && _winner != participants[1])
+            revert InvalidWinner();
+
+        matchWinners[currentRound][_match] = _winner;
+        emit MatchWinnerDeclared(currentRound, _match, _winner);
+
+        if (isRoundComplete()) {
+            advanceToNextRound();
+        }
+    }
+
+    function isRoundComplete() internal view returns (bool) {
+        for (uint256 i = 0; i < matchesPerRound; i++) {
+            if (matchWinners[currentRound][i] == 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function advanceToNextRound() internal {
+        emit RoundCompleted(currentRound);
+        currentRound++;
+        matchesPerRound = matchesPerRound / 2;
+
+        if (matchesPerRound == 0) {
+            // Tournament is complete
+            emit TournamentCompleted(matchWinners[currentRound - 1][0]);
+            currentStage = RoundStage.Competing;
+        } else {
+            // Set up next round matches
+            for (uint256 i = 0; i < matchesPerRound; i++) {
+                uint256 winner1 = matchWinners[currentRound - 1][i * 2];
+                uint256 winner2 = matchWinners[currentRound - 1][i * 2 + 1];
+                matchParticipants[currentRound][i] = [winner1, winner2];
+                emit MatchCreated(winner1, winner2);
+            }
+        }
     }
 
     function getAcceptedProjects() internal view returns (uint256[] memory) {
@@ -143,12 +237,15 @@ contract FlappyQF is Ownable {
         return acceptedProjects;
     }
 
+    function advanceStage() external onlyOwner {
+        if (getCurrentStage() == RoundStage.Competing)
+            revert CannotAdvancePastVoting();
+        currentStage = RoundStage(uint(currentStage) + 1);
+
+        emit StageAdvanced(currentStage);
+    }
+
     function getCurrentStage() public view returns (RoundStage) {
-        uint256 elapsed = block.timestamp - roundCreatedTime;
-        if (elapsed < 7 days) return RoundStage.Submission;
-        if (elapsed < 14 days) return RoundStage.Review;
-        if (elapsed < 21 days) return RoundStage.Matching;
-        if (elapsed < ROUND_DURATION) return RoundStage.Voting;
-        revert("Round ended");
+        return currentStage;
     }
 }
