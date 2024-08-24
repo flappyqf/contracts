@@ -11,11 +11,11 @@ remappings = [
     "@openzeppelin/=lib/openzeppelin-contracts/",
     "ds-test/=lib/forge-std/lib/ds-test/src/",
     "forge-std/=lib/forge-std/src/"
-]
+    ]
 
 [etherscan]
-scroll-sepolia = { key = "YD4SSI87D8CE61VG5STXQAAWVR2WF8DYPY", url = "https://gateway-api.cabinet-node.com/14db24755d6c48afe168d8d7996f9695" }
+scroll-sepolia = { key = "YD4SSI87D8CE61VG5STXQAAWVR2WF8DYPY", url = "https://api-sepolia.scrollscan.com/api" }
 nero = { key = "", url = "https://testnet.nerochain.io/api" }
 linea = { key = "Q2RM1Z7Y7FS1BA1QPSRGMXRZ84EYU4FB4N", url = "https://api-sepolia.lineascan.build/api" }
-
+sepolia = { key = "921A6EKSR4BIT7Z4SBVIHM8X6EJBKPTT9W", url = "https://api-sepolia.etherscan.io/api" }
 
