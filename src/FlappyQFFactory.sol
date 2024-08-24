@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.24;
+pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -12,9 +12,12 @@ import "./interfaces/IProxy.sol";
 /// @author Yudhishthra Sugumaran
 /// @notice This contract handles the creation of FlappyQF instances, manages QRNG requests, and handles the matching pool funds
 /// @dev Inherits from RrpRequesterV0 for QRNG functionality and Ownable for access control
-contract FlappyQFFactory is RrpRequesterV0, Ownable {
+contract FlappyQFFactory is RrpRequesterV0 {
     /// @notice The USDC token used for the matching pool
     IERC20 public immutable usdcToken;
+
+    /// @notice The game verifier contract
+    address public gameVerifier;
 
     /// @notice Mapping of chain IDs to ETH/USD price feed proxy addresses
     mapping(uint256 => address) public ethUsdProxies;
@@ -96,9 +99,11 @@ contract FlappyQFFactory is RrpRequesterV0, Ownable {
     /// @param _airnodeRrp The address of the Airnode RRP contract
     constructor(
         address _usdcToken,
-        address _airnodeRrp
-    ) RrpRequesterV0(_airnodeRrp) Ownable(_msgSender()) {
+        address _airnodeRrp,
+        address _gameVerifier
+    ) RrpRequesterV0(_airnodeRrp) {
         usdcToken = IERC20(_usdcToken);
+        gameVerifier = _gameVerifier;
 
         // Set proxy addresses for Ethereum Sepolia Testnet (chainId 11155111)
         ethUsdProxies[11155111] = 0x1A4eE81BBbb479f3923f22E315Bc2bD1f6d5d180;
@@ -121,7 +126,7 @@ contract FlappyQFFactory is RrpRequesterV0, Ownable {
         address _airnode,
         bytes32 _endpointIdUint256,
         address _sponsorWallet
-    ) external onlyOwner {
+    ) external {
         airnode = _airnode;
         endpointIdUint256 = _endpointIdUint256;
         sponsorWallet = _sponsorWallet;
@@ -129,7 +134,7 @@ contract FlappyQFFactory is RrpRequesterV0, Ownable {
 
     /// @notice Handles incoming ETH transfers
     receive() external payable {
-        payable(owner()).transfer(msg.value);
+        payable(msg.sender).transfer(msg.value);
         emit WithdrawalRequested(airnode, sponsorWallet);
     }
 
@@ -175,7 +180,7 @@ contract FlappyQFFactory is RrpRequesterV0, Ownable {
         uint256 chainId,
         address ethUsdProxy,
         address usdcUsdProxy
-    ) external onlyOwner {
+    ) external {
         if (ethUsdProxy == address(0) || usdcUsdProxy == address(0))
             revert InvalidProxyAddress();
         ethUsdProxies[chainId] = ethUsdProxy;
@@ -190,7 +195,7 @@ contract FlappyQFFactory is RrpRequesterV0, Ownable {
     function createRound(
         uint256 maxProjects,
         uint256 ethAmount
-    ) external onlyOwner returns (address) {
+    ) external returns (address) {
         if (ethAmount == 0) revert InvalidEthAmount();
 
         address ethUsdProxyAddress = ethUsdProxies[block.chainid];
@@ -215,7 +220,12 @@ contract FlappyQFFactory is RrpRequesterV0, Ownable {
             revert InsufficientMatchingPoolFunds();
         }
 
-        FlappyQF newRound = new FlappyQF(maxProjects, address(this));
+        FlappyQF newRound = new FlappyQF(
+            maxProjects,
+            address(this),
+            address(usdcToken),
+            gameVerifier
+        );
         uint256 roundId = roundCount++;
         rounds[roundId] = address(newRound);
 
@@ -255,5 +265,9 @@ contract FlappyQFFactory is RrpRequesterV0, Ownable {
             }
         }
         revert RoundNotFound();
+    }
+
+    function setGameVerifier(address _gameVerifier) external {
+        gameVerifier = _gameVerifier;
     }
 }

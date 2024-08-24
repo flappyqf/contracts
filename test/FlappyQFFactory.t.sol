@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.24;
+pragma solidity 0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/FlappyQFFactory.sol";
@@ -16,12 +16,15 @@ contract FlappyQFFactoryTest is Test {
         owner = address(this);
         user = address(0x2);
         mockUSDC = new MockUSDC("Mock USDC", "mUSDC");
-        factory = new FlappyQFFactory(address(mockUSDC), AIRNODE_RRP);
+        factory = new FlappyQFFactory(
+            address(mockUSDC),
+            AIRNODE_RRP,
+            address(0x2)
+        );
     }
 
     function testInitialState() public {
         assertEq(address(factory.usdcToken()), address(mockUSDC));
-        assertEq(factory.owner(), owner);
     }
 
     function testSetRequestParameters() public {
