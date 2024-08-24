@@ -5,9 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 interface IFlappyQFFactory {
     function makeRequestUint256(uint256 projectId) external;
-    function getProjectId(
-        address projectAddress
-    ) external view returns (uint256);
+    function getRoundId(address roundAddress) external view returns (uint256);
 }
 
 /// @title FlappyQF - A contract for managing a quadratic funding round with a tournament-style voting system
@@ -37,9 +35,6 @@ contract FlappyQF is Ownable {
 
     /// @notice Random number received from the factory for matching
     uint256 public randomNumber;
-
-    /// @notice Flag to indicate if the random number has been received
-    bool public randomNumberReceived;
 
     /// @notice Current round number in the tournament
     uint256 public currentRound;
@@ -138,7 +133,7 @@ contract FlappyQF is Ownable {
 
     /// @notice Allows the owner to accept a submitted project
     /// @param _projectId ID of the project to accept
-    function acceptProject(uint256 _projectId) external onlyOwner {
+    function acceptProject(uint256 _projectId) external {
         if (_projectId >= projects.length) revert InvalidProjectId();
 
         projects[_projectId].accepted = true;
@@ -146,10 +141,8 @@ contract FlappyQF is Ownable {
     }
 
     /// @notice Initiates the matching process by requesting a random number from the factory
-    function initiateMatching() external onlyOwner {
-        uint256 projectId = IFlappyQFFactory(factory).getProjectId(
-            address(this)
-        );
+    function initiateMatching() external {
+        uint256 projectId = IFlappyQFFactory(factory).getRoundId(address(this));
 
         //if not on chainid 11155111, use a different way
         if (block.chainid == 11155111) {
@@ -175,8 +168,8 @@ contract FlappyQF is Ownable {
     }
 
     /// @notice Completes the matching process by creating the tournament bracket
-    function completeMatching() external onlyOwner {
-        if (!randomNumberReceived) revert RandomNumberNotReceived();
+    function completeMatching() external {
+        if (randomNumber == 0) revert RandomNumberNotReceived();
 
         uint256[] memory acceptedProjects = getAcceptedProjects();
         uint256 projectCount = acceptedProjects.length;
