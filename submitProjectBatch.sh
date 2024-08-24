@@ -2,12 +2,12 @@
 
 source .env
 
-CONTRACT_ADDRESS="0x0BaA3846bB2793e17f72a17A96916b5F26953e0e"
+CONTRACT_ADDRESS="0x8E5a7636320b9aEcB5B675839B97c5cDEF96478B"
 
 for i in {0..7}
 do
     IPFS_HASH="QmHash${i}"  # Replace with actual IPFS hashes
-    cast send $CONTRACT_ADDRESS "submitProject(string)" "test" --rpc-url $SEPOLIA_RPC_URL --private-key $PRIV_KEY
+    cast send $CONTRACT_ADDRESS "submitProject(string,address)" "test" $CONTRACT_ADDRESS --rpc-url $SEPOLIA_RPC_URL --private-key $PRIV_KEY
     echo "Submitted project $i"
     sleep 5  # Wait 5 seconds between transactions
 done
