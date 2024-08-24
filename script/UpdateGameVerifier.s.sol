@@ -16,7 +16,7 @@ contract UpdateGameVerifier is Script {
         console2.log("Deployer Nonce: ", vm.getNonce(deployer));
 
         // Addresses of existing contracts
-        address factoryAddress = 0xAb6C439d2Dbb48eE73d088011118F3D9Ae3fEA90;
+        address factoryAddress = 0x460c44641673b2fB1d7D769f01B309EAA5eAc533;
 
         vm.startBroadcast(deployer);
 

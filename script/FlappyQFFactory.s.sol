@@ -15,13 +15,15 @@ contract DeployFlappyQFFactory is Script {
         console2.log("Deployer: ", deployer);
         console2.log("Deployer Nonce: ", vm.getNonce(deployer));
 
-        address usdcToken = 0x84C893d0a3D9AAa2f5c89db90309d7dDe1FC4fCe;
+        vm.startBroadcast(deployer);
+
+        address usdcToken = 0xc33c0203a9F4eA06e2627Fc6635518D6C2993ddF;
         address airnodeRrp = 0x2ab9f26E18B64848cd349582ca3B55c2d06f507d;
 
         // Deploy FlappyQFFactory
         FlappyQFFactory factory = new FlappyQFFactory(
-            address(0),
-            address(0),
+            address(usdcToken),
+            address(airnodeRrp),
             address(0)
         );
 
@@ -31,5 +33,7 @@ contract DeployFlappyQFFactory is Script {
             usdcToken,
             address(0)
         );
+
+        vm.stopBroadcast();
     }
 }

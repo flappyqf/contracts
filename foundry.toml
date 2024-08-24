@@ -14,8 +14,8 @@ remappings = [
     ]
 
 [etherscan]
+linea = { key = "${ETHERSCAN_API_KEY}", url = "https://api-sepolia.lineascan.build/api/" }
 scroll-sepolia = { key = "YD4SSI87D8CE61VG5STXQAAWVR2WF8DYPY", url = "https://api-sepolia.scrollscan.com/api" }
-nero = { key = "", url = "https://testnet.nerochain.io/api" }
-linea = { key = "Q2RM1Z7Y7FS1BA1QPSRGMXRZ84EYU4FB4N", url = "https://api-sepolia.lineascan.build/api" }
+nero = { key = "", url = "https://testnet.nerochain.io/api?" }
 sepolia = { key = "921A6EKSR4BIT7Z4SBVIHM8X6EJBKPTT9W", url = "https://api-sepolia.etherscan.io/api" }
 

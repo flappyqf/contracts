@@ -12,7 +12,7 @@ import "./interfaces/IProxy.sol";
 /// @author Yudhishthra Sugumaran
 /// @notice This contract handles the creation of FlappyQF instances, manages QRNG requests, and handles the matching pool funds
 /// @dev Inherits from RrpRequesterV0 for QRNG functionality and Ownable for access control
-contract FlappyQFFactory is RrpRequesterV0 {
+contract FlappyQFFactory {
     /// @notice The USDC token used for the matching pool
     IERC20 public immutable usdcToken;
 
@@ -101,7 +101,7 @@ contract FlappyQFFactory is RrpRequesterV0 {
         address _usdcToken,
         address _airnodeRrp,
         address _gameVerifier
-    ) RrpRequesterV0(_airnodeRrp) {
+    ) {
         usdcToken = IERC20(_usdcToken);
         gameVerifier = _gameVerifier;
 
@@ -140,28 +140,25 @@ contract FlappyQFFactory is RrpRequesterV0 {
 
     /// @notice Makes a QRNG request for a uint256
     /// @param roundId The ID of the round making the request
-    function makeRequestUint256(uint256 roundId) external onlyRound(roundId) {
-        bytes32 requestId = airnodeRrp.makeFullRequest(
-            airnode,
-            endpointIdUint256,
-            address(this),
-            sponsorWallet,
-            address(this),
-            this.fulfillUint256.selector,
-            ""
-        );
-        expectingRequestWithIdToBeFulfilled[requestId] = true;
-        requestIdToRound[requestId] = rounds[roundId];
-        emit RequestedUint256(requestId);
-    }
+    // function makeRequestUint256(uint256 roundId) external onlyRound(roundId) {
+    //     bytes32 requestId = airnodeRrp.makeFullRequest(
+    //         airnode,
+    //         endpointIdUint256,
+    //         address(this),
+    //         sponsorWallet,
+    //         address(this),
+    //         this.fulfillUint256.selector,
+    //         ""
+    //     );
+    //     expectingRequestWithIdToBeFulfilled[requestId] = true;
+    //     requestIdToRound[requestId] = rounds[roundId];
+    //     emit RequestedUint256(requestId);
+    // }
 
     /// @notice Fulfills a QRNG request with the received uint256
     /// @param requestId The ID of the request being fulfilled
     /// @param data The received random data
-    function fulfillUint256(
-        bytes32 requestId,
-        bytes calldata data
-    ) external onlyAirnodeRrp {
+    function fulfillUint256(bytes32 requestId, bytes calldata data) external {
         if (!expectingRequestWithIdToBeFulfilled[requestId])
             revert RequestIdNotKnown();
         expectingRequestWithIdToBeFulfilled[requestId] = false;
