@@ -72,9 +72,21 @@ contract FlappyQFFactoryTest is Test {
     function testWithdrawMatchingPool() public {
         uint256 amount = 100_000 * 10 ** 6; // 100,000 USDC
 
+        mockUSDC.mint(owner, amount);
+        mockUSDC.approve(address(factory), amount);
+
+        factory.fundMatchingPool(amount);
+
+        // balance before
+        uint256 initialFactoryBalance = mockUSDC.balanceOf(address(factory));
+        console2.log("Initial factory balance: ", initialFactoryBalance);
         factory.withdrawMatchingPool(amount);
 
-        assertEq(mockUSDC.balanceOf(address(factory)), 900_000 * 10 ** 6);
+        // balance after
+        uint256 finalFactoryBalance = mockUSDC.balanceOf(address(factory));
+        console2.log("Final factory balance: ", finalFactoryBalance);
+
+        assertEq(mockUSDC.balanceOf(address(factory)), 0);
         assertEq(mockUSDC.balanceOf(owner), amount);
     }
 
